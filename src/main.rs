@@ -410,27 +410,32 @@ fn draw_chart(app: &App, cols: u16, chart_h: u16) {
             if z == app.z { "b" } else { "" },
         ));
 
+        // A cell is a coloured background, not a block glyph. A full
+        // block is a character like any other: if the font draws it a
+        // pixel past the cell box, every one of them bleeds into the row
+        // below, which is what it did on glass. A background has no
+        // glyph to overflow.
         let mut cur: Option<(u8, u8, u8)> = None;
         for c in 0..vis_n {
             let n = app.left_n + c;
             let Some(nuc) = t.get(z, n) else {
-                out.push_str(style::RESET);
-                cur = None;
+                if cur.is_some() {
+                    out.push_str(style::RESET);
+                    cur = None;
+                }
                 out.push(' ');
                 continue;
             };
-            if z == app.z && n == app.n {
-                out.push_str(style::RESET);
-                cur = None;
-                out.push_str(&style::rgb("◆", Some((255, 255, 255)), None, "b"));
-                continue;
-            }
-            let rgb = rgb_for(nuc, app.mode);
+            let rgb = if z == app.z && n == app.n {
+                (255, 255, 255)
+            } else {
+                rgb_for(nuc, app.mode)
+            };
             if cur != Some(rgb) {
-                out.push_str(&style::set_fg_rgb(rgb.0, rgb.1, rgb.2));
+                out.push_str(&style::set_bg_rgb(rgb.0, rgb.1, rgb.2));
                 cur = Some(rgb);
             }
-            out.push('█');
+            out.push(' ');
         }
         // Erase the rest of the row rather than blanking it by hand: a
         // row of spaces only covers what this frame knows about, and the
@@ -613,7 +618,7 @@ fn steps(n: usize) -> String {
 /// What the colours mean under the current mode.
 fn legend(mode: usize) -> String {
     let chip = |rgb: (u8, u8, u8), text: &str| {
-        format!("{} {}", style::rgb("█", Some(rgb), None, ""), style::dim(text))
+        format!("{} {}", style::rgb(" ", None, Some(rgb), ""), style::dim(text))
     };
     match mode {
         1 => format!("{}  {}", style::dim("short"), gradient_bar("long")),
@@ -638,7 +643,7 @@ fn gradient_bar(tail: &str) -> String {
     for i in 0..12 {
         let t = i as f64 / 11.0;
         let rgb = data::heat(t);
-        s.push_str(&style::rgb("█", Some(rgb), None, ""));
+        s.push_str(&style::rgb(" ", None, Some(rgb), ""));
     }
     format!("{s} {}", style::dim(tail))
 }
