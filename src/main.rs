@@ -11,7 +11,7 @@ mod canvas;
 mod data;
 
 use crust::style;
-use crust::{Crust, Cursor, Input, Pane, Popup};
+use crust::{seq, Crust, Cursor, Input, Pane, Popup};
 use data::{rgb_for, table, Decay, MODES};
 use std::io::Write;
 
@@ -78,6 +78,8 @@ fn main() {
 
     Crust::init();
     Crust::set_app_identity("Isotopes");
+    // Whatever was on this terminal before is not ours to keep.
+    Crust::clear_screen();
     let (mut cols, mut rows) = Crust::terminal_size();
     let mut footer = Pane::new(1, rows, cols, 1, 250, 236);
     footer.scroll = false;
@@ -102,6 +104,9 @@ fn main() {
             "S-TAB" => app.next_stable(-1),
             "z" => {
                 app.view = if app.view == View::Chart { View::Overview } else { View::Chart };
+                // The two views cover different cells; start the new one
+                // on a clean screen.
+                Crust::clear_screen();
             }
             "1" | "2" | "3" | "4" | "5" => {
                 app.mode = key.parse::<usize>().unwrap_or(1) - 1;
@@ -320,8 +325,13 @@ fn scroll_to(app: &mut App, cols: u16, chart_h: u16) {
 }
 
 fn draw_header(app: &App, cols: u16) {
+    const BAR: (u8, u8, u8) = (38, 38, 38);
     let n = app.cur();
-    let mode = MODES[app.mode];
+    let bg = style::set_bg_rgb(BAR.0, BAR.1, BAR.2);
+    // Every style helper closes with a reset, which drops the bar's
+    // background half way along the row. Re-assert it after each one.
+    let armed = |s: &str| s.replace(style::RESET, &format!("{}{}", style::RESET, bg));
+
     let left = format!(
         " {}  {}  Z {} · N {} · A {} ",
         style::rgb("isotopes", Some((247, 76, 0)), None, "b"),
@@ -330,18 +340,18 @@ fn draw_header(app: &App, cols: u16) {
         n.n,
         n.a()
     );
-    let right = format!("{}  ·  {} nuclides ", mode, table().all.len());
+    let right = format!("{}  ·  {} nuclides ", MODES[app.mode], table().all.len());
     let pad = (cols as usize)
-        .saturating_sub(crust::display_width(&left) + right.len());
+        .saturating_sub(crust::display_width(&left) + crust::display_width(&right));
     print!(
-        "{}{}",
+        "{}{}{}{}{}{}{}",
         Cursor::at(1, 1),
-        style::rgb(
-            &format!("{left}{}{}", " ".repeat(pad), style::dim(&right)),
-            None,
-            Some((38, 38, 38)),
-            ""
-        )
+        bg,
+        armed(&left),
+        " ".repeat(pad),
+        armed(&style::dim(&right)),
+        style::RESET,
+        seq::ERASE_EOL
     );
 }
 
@@ -354,7 +364,7 @@ fn draw_chart(app: &App, cols: u16, chart_h: u16) {
         let z = app.top_z as i32 - row as i32;
         out.push_str(&Cursor::at(1, 2 + row));
         if z < 0 {
-            out.push_str(&" ".repeat(cols as usize));
+            out.push_str(seq::ERASE_EOL);
             continue;
         }
         let z = z as u32;
@@ -395,7 +405,11 @@ fn draw_chart(app: &App, cols: u16, chart_h: u16) {
             }
             out.push('█');
         }
+        // Erase the rest of the row rather than blanking it by hand: a
+        // row of spaces only covers what this frame knows about, and the
+        // frame before it may have reached further right.
         out.push_str(style::RESET);
+        out.push_str(seq::ERASE_EOL);
     }
 
     // The neutron ruler along the bottom.
@@ -417,7 +431,8 @@ fn draw_chart(app: &App, cols: u16, chart_h: u16) {
         }
         n += 10;
     }
-    out.push_str(&style::dim(&format!("{ruler:<width$}", width = cols as usize)));
+    out.push_str(&style::dim(ruler.trim_end()));
+    out.push_str(seq::ERASE_EOL);
     print!("{out}");
 }
 
@@ -479,7 +494,7 @@ fn draw_detail(app: &App, cols: u16, rows: u16) {
                 break;
             }
         }
-        format!("{s}{}", style::dim(&format!("   ({} steps)", chain.len() - 1)))
+        format!("{s}{}", style::dim(&steps(chain.len() - 1)))
     };
 
     let half = if nuc.is_stable() {
@@ -535,18 +550,32 @@ fn draw_detail(app: &App, cols: u16, rows: u16) {
     ];
     for (i, line) in lines.iter().enumerate() {
         print!(
-            "{} {}",
+            "{} {}{}{}",
             Cursor::at(1, y0 + i as u16),
-            crust::truncate_ansi(line, cols as usize - 2)
+            crust::truncate_ansi(line, cols as usize - 2),
+            style::RESET,
+            seq::ERASE_EOL
         );
-        print!("{}", " ".repeat(2));
     }
-    if let Some((msg, rgb)) = &app.status {
-        print!(
-            "{}{}",
-            Cursor::at(1, y0 + lines.len() as u16),
-            crust::truncate_ansi(&style::rgb(&format!(" {msg}"), Some(*rgb), None, ""), cols as usize)
-        );
+    let status = match &app.status {
+        Some((msg, rgb)) => style::rgb(&format!(" {msg}"), Some(*rgb), None, ""),
+        None => String::new(),
+    };
+    print!(
+        "{}{}{}{}",
+        Cursor::at(1, y0 + lines.len() as u16),
+        crust::truncate_ansi(&status, cols as usize),
+        style::RESET,
+        seq::ERASE_EOL
+    );
+}
+
+/// "(1 step)" rather than "(1 steps)".
+fn steps(n: usize) -> String {
+    if n == 1 {
+        "   (1 step)".to_string()
+    } else {
+        format!("   ({n} steps)")
     }
 }
 
@@ -640,8 +669,8 @@ fn show_chain(app: &App, cols: u16, rows: u16) {
         text.push_str(&format!(
             "\n{}\n",
             style::dim(&format!(
-                "{} steps, ending at {}{}",
-                chain.len() - 1,
+                "{}, ending at {}{}",
+                steps(chain.len() - 1).trim().trim_matches(['(', ')']),
                 end.name(),
                 if end.is_stable() { ", which is stable" } else { "" }
             ))
