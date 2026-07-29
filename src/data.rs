@@ -113,8 +113,12 @@ pub struct Nuclide {
     pub jp: String,
     /// Natural abundance in percent, for the 288 that occur on Earth.
     pub abundance: Option<f64>,
-    /// Half-life in seconds. `None` means stable.
+    /// Half-life in seconds. `None` when the evaluators have no value,
+    /// which is not the same as stable: 179 nuclides are known to exist
+    /// without anyone having measured how long they last.
     pub half_life_s: Option<f64>,
+    /// Stable as far as anybody can tell.
+    pub stable: bool,
     /// Half-life as the table gives it, with its unit: "4.468E9 Y".
     pub half_life_text: String,
     /// Decay modes with branching percentages, strongest first.
@@ -138,7 +142,7 @@ impl Nuclide {
     }
 
     pub fn is_stable(&self) -> bool {
-        self.half_life_s.is_none()
+        self.stable
     }
 
     /// The mode it mostly decays by, which is what the chart colours.
@@ -178,7 +182,10 @@ impl Nuclide {
 
     /// Half-life in a unit a human reads, from nanoseconds to eons.
     pub fn half_life_pretty(&self) -> String {
-        let Some(t) = self.half_life_s else { return "stable".into() };
+        if self.stable {
+            return "stable".into();
+        }
+        let Some(t) = self.half_life_s else { return "unknown".into() };
         const UNITS: [(f64, &str); 9] = [
             (3.156e16, "Gy"),
             (3.156e13, "My"),
@@ -267,7 +274,9 @@ impl Table {
     }
 
     /// Find a nuclide by what a person would type: `U238`, `u-238`,
-    /// `238U`, `Fe 56`.
+    /// `238U`, `Fe 56`. A bare element symbol lands on the isotope you
+    /// would actually meet: the most abundant one, or failing that the
+    /// longest-lived, which is what `isotopes Fe` should open on.
     pub fn find(&self, query: &str) -> Option<usize> {
         let q = query.trim().replace(['-', ' ', '_'], "").to_lowercase();
         if q.is_empty() {
@@ -275,10 +284,36 @@ impl Table {
         }
         let digits: String = q.chars().filter(|c| c.is_ascii_digit()).collect();
         let letters: String = q.chars().filter(|c| c.is_ascii_alphabetic()).collect();
+        if letters.is_empty() {
+            return None;
+        }
+        if digits.is_empty() {
+            return self.best_of(&letters);
+        }
         let a: u32 = digits.parse().ok()?;
         self.all
             .iter()
             .position(|n| n.symbol.to_lowercase() == letters && n.a() == a)
+            .or_else(|| self.best_of(&letters))
+    }
+
+    /// The isotope of an element worth opening on.
+    fn best_of(&self, symbol: &str) -> Option<usize> {
+        let of_element = |i: &usize| self.all[*i].symbol.to_lowercase() == symbol;
+        let idx: Vec<usize> = (0..self.all.len()).filter(of_element).collect();
+        idx.iter()
+            .copied()
+            .max_by(|&a, &b| {
+                let (x, y) = (&self.all[a], &self.all[b]);
+                let rank = |n: &Nuclide| {
+                    (
+                        n.abundance.unwrap_or(0.0),
+                        if n.is_stable() { f64::INFINITY } else { n.half_life_s.unwrap_or(0.0) },
+                    )
+                };
+                let (rx, ry) = (rank(x), rank(y));
+                rx.0.total_cmp(&ry.0).then(rx.1.total_cmp(&ry.1))
+            })
     }
 }
 
@@ -310,7 +345,8 @@ pub fn table() -> &'static Table {
                 symbol: f[2].to_string(),
                 jp: f[3].to_string(),
                 abundance: f[4].parse().ok(),
-                half_life_s: if f[5] == "STABLE" { None } else { f[5].parse().ok() },
+                stable: f[5] == "STABLE",
+                half_life_s: f[5].parse().ok(),
                 half_life_text: f[6].to_string(),
                 decays,
                 binding: f[8].parse().ok(),
@@ -396,6 +432,25 @@ pub fn rgb_for(nuc: &Nuclide, mode: usize) -> (u8, u8, u8) {
 mod tests {
     use super::*;
 
+    /// An unmeasured half-life is not the same as stable. Getting this
+    /// wrong painted 179 exotic nuclides white, out on the drip lines,
+    /// where nothing is stable.
+    #[test]
+    fn unknown_is_not_stable() {
+        let t = table();
+        let unknown: Vec<&Nuclide> = t
+            .all
+            .iter()
+            .filter(|n| !n.is_stable() && n.half_life_s.is_none())
+            .collect();
+        assert!(unknown.len() > 150, "only {} with no half-life", unknown.len());
+        assert!(unknown.iter().all(|n| n.half_life_pretty() == "unknown"));
+        assert!(unknown.iter().all(|n| n.main_decay() != Decay::Stable));
+        // And the genuinely stable ones stay stable.
+        assert!(t.get(26, 30).unwrap().is_stable());
+        assert_eq!(t.all.iter().filter(|n| n.is_stable()).count(), 244);
+    }
+
     #[test]
     fn table_loads() {
         let t = table();
@@ -463,6 +518,11 @@ mod tests {
         }
         assert!(t.find("Fe56").is_some());
         assert!(t.find("zz9").is_none());
+        // A bare symbol lands on the isotope you would actually meet.
+        assert_eq!(t.all[t.find("Fe").unwrap()].name(), "Fe-56");
+        assert_eq!(t.all[t.find("u").unwrap()].name(), "U-238");
+        // Nothing stable, so the longest-lived one wins.
+        assert_eq!(t.all[t.find("Tc").unwrap()].name(), "Tc-97");
     }
 
     #[test]
