@@ -38,6 +38,10 @@ struct App {
     /// Top-left of the visible window into the chart.
     top_z: u32,
     left_n: u32,
+    /// The window the last frame was drawn with. When the chart slides,
+    /// every cell on screen means something different, and anything the
+    /// new frame does not cover has to go.
+    drawn_at: Option<(u32, u32, u16, u16)>,
     chat: Vec<(String, String)>,
     status: Option<(String, (u8, u8, u8))>,
 }
@@ -72,6 +76,7 @@ fn main() {
         view: View::Chart,
         top_z: 0,
         left_n: 0,
+        drawn_at: None,
         chat: Vec::new(),
         status: None,
     };
@@ -84,7 +89,7 @@ fn main() {
     let mut footer = Pane::new(1, rows, cols, 1, 250, 236);
     footer.scroll = false;
 
-    draw(&mut app, &mut footer, cols, rows);
+    (cols, rows) = draw(&mut app, &mut footer);
 
     loop {
         let Some(key) = Input::getchr(None) else { continue };
@@ -104,6 +109,7 @@ fn main() {
             "S-TAB" => app.next_stable(-1),
             "z" => {
                 app.view = if app.view == View::Chart { View::Overview } else { View::Chart };
+                app.drawn_at = None;
                 // The two views cover different cells; start the new one
                 // on a clean screen.
                 Crust::clear_screen();
@@ -164,21 +170,19 @@ fn main() {
                 Ok(p) => app.say(&format!("wrote {p}"), (140, 220, 140)),
                 Err(e) => app.say(&format!("export: {e}"), ERR_RGB),
             },
+            "r" | "C-L" => {
+                Crust::clear_screen();
+                app.drawn_at = None;
+            }
             "?" => {
                 show_help(cols, rows);
                 Crust::clear_screen();
             }
-            "RESIZE" => {
-                let (c, r) = Crust::terminal_size();
-                cols = c;
-                rows = r;
-                footer.y = rows;
-                footer.w = cols;
-                Crust::clear_screen();
-            }
+            // Handled in draw(), which re-reads the size every frame.
+            "RESIZE" => Crust::clear_screen(),
             _ => {}
         }
-        draw(&mut app, &mut footer, cols, rows);
+        (cols, rows) = draw(&mut app, &mut footer);
     }
 
     Crust::cleanup();
@@ -283,13 +287,35 @@ impl App {
 
 // ─────────────────────────── drawing ─────────────────────────────────
 
-fn draw(app: &mut App, footer: &mut Pane, cols: u16, rows: u16) {
+fn draw(app: &mut App, footer: &mut Pane) -> (u16, u16) {
+    // Ask the terminal how big it is on every frame rather than trusting
+    // the size we were told at startup. A window manager that resizes
+    // the window after launch, or a terminal that does not send the
+    // signal, otherwise leaves the app drawing into part of the screen
+    // and the rest holding whatever was there before.
+    let (cols, rows) = Crust::terminal_size();
+    if cols != footer.w || rows != footer.y {
+        footer.w = cols;
+        footer.y = rows;
+        footer.full_refresh();
+        Crust::clear_screen();
+    }
     let chart_h = rows.saturating_sub(2 + DETAIL_H + 1);
+    if app.view == View::Chart {
+        scroll_to(app, cols, chart_h);
+        // Scrolling shifts every cell. Wipe first: a repaint alone
+        // relies on the terminal clearing what the new frame overwrites
+        // with blanks, and one that does not leaves a trail.
+        let now = (app.top_z, app.left_n, cols, rows);
+        if app.drawn_at.map(|d| d != now).unwrap_or(true) {
+            Crust::clear_screen();
+            app.drawn_at = Some(now);
+        }
+    }
     if app.view == View::Overview {
         draw_header(app, cols);
         canvas::overview(app.z, app.n, app.mode, 1, 2, cols, chart_h + 1);
     } else {
-        scroll_to(app, cols, chart_h);
         draw_header(app, cols);
         draw_chart(app, cols, chart_h);
     }
@@ -297,6 +323,7 @@ fn draw(app: &mut App, footer: &mut Pane, cols: u16, rows: u16) {
     footer.say(&keys_line(app));
     print!("{}", Cursor::hide_seq());
     std::io::stdout().flush().ok();
+    (cols, rows)
 }
 
 /// Keep the cursor inside the window, with a margin so it never sits on
@@ -503,7 +530,11 @@ fn draw_detail(app: &App, cols: u16, rows: u16) {
         format!(
             "{}{}",
             val(&nuc.half_life_pretty()),
-            style::dim(&format!("  ({})", nuc.half_life_text))
+            if nuc.half_life_text.trim().is_empty() {
+                String::new()
+            } else {
+                style::dim(&format!("  ({})", nuc.half_life_text))
+            }
         )
     };
     let abundance = match nuc.abundance {
@@ -615,7 +646,7 @@ fn gradient_bar(tail: &str) -> String {
 fn keys_line(app: &App) -> String {
     let overview = if app.view == View::Overview { "z chart" } else { "z overview" };
     style::dim(&format!(
-        "←↓↑→ move · Tab stable · ⏎ decay chain · 1-5/m colour · {overview} · / find · c claude · e csv · ? help · q"
+        "←↓↑→ move · Tab stable · ⏎ decay chain · 1-5/m colour · {overview} · / find · c claude · e csv · r redraw · ? help · q"
     ))
 }
 

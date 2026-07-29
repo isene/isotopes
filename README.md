@@ -69,6 +69,7 @@ Or build it: `cargo build --release`. It needs
 | / | Find a nuclide: `U-238`, `fe56`, `14C` |
 | c | Ask Claude about this nuclide |
 | e | Write the table to `~/isotopes.csv` |
+| r | Redraw from scratch |
 | ? | Help |
 | q | Quit |
 
