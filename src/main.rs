@@ -426,11 +426,16 @@ fn draw_chart(app: &App, cols: u16, chart_h: u16) {
                 out.push(' ');
                 continue;
             };
-            let rgb = if z == app.z && n == app.n {
-                (255, 255, 255)
-            } else {
-                rgb_for(nuc, app.mode)
-            };
+            let rgb = rgb_for(nuc, app.mode);
+            if z == app.z && n == app.n {
+                // The cursor keeps the cell's own colour and puts a mark
+                // on it. A white cursor cell would vanish on a stable
+                // nuclide, which is white.
+                out.push_str(style::RESET);
+                cur = None;
+                out.push_str(&style::rgb("◆", Some(ink_on(rgb)), Some(rgb), "b"));
+                continue;
+            }
             if cur != Some(rgb) {
                 out.push_str(&style::set_bg_rgb(rgb.0, rgb.1, rgb.2));
                 cur = Some(rgb);
@@ -604,6 +609,13 @@ fn draw_detail(app: &App, cols: u16, rows: u16) {
         style::RESET,
         seq::ERASE_EOL
     );
+}
+
+/// Black or white, whichever the eye can read on this colour. The
+/// coefficients are the usual perceptual weights for green-heavy sight.
+fn ink_on(bg: (u8, u8, u8)) -> (u8, u8, u8) {
+    let lum = 0.299 * bg.0 as f64 + 0.587 * bg.1 as f64 + 0.114 * bg.2 as f64;
+    if lum > 140.0 { (10, 10, 15) } else { (255, 255, 255) }
 }
 
 /// "(1 step)" rather than "(1 steps)".

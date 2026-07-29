@@ -4,7 +4,7 @@
 
 **The chart of the nuclides in your terminal. Written in Rust.**
 
-![Rust](https://img.shields.io/badge/language-Rust-f74c00) ![License](https://img.shields.io/badge/license-Unlicense-green) ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue) [![Fe2O3](https://img.shields.io/badge/suite-Fe%E2%82%82O%E2%82%83-b7410e)](https://github.com/isene/fe2o3)
+![Rust](https://img.shields.io/badge/language-Rust-f74c00) ![Release](https://badgen.net/github/release/isene/isotopes) ![License](https://img.shields.io/badge/license-Unlicense-green) ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue) ![Stay Amazing](https://img.shields.io/badge/Stay-Amazing-important) [![Fe2O3](https://img.shields.io/badge/suite-Fe%E2%82%82O%E2%82%83-b7410e)](https://github.com/isene/fe2o3)
 
 Neutrons run across, protons up, one cell per nuclide, 3,386 of them. The
 valley of stability is not drawn: it falls out of the data, the way the
