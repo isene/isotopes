@@ -42,6 +42,8 @@ struct App {
     /// every cell on screen means something different, and anything the
     /// new frame does not cover has to go.
     drawn_at: Option<(u32, u32, u16, u16)>,
+    /// The overview as a picture, where the terminal shows images.
+    pixels: Option<glow::Display>,
     chat: Vec<(String, String)>,
     status: Option<(String, (u8, u8, u8))>,
 }
@@ -79,6 +81,7 @@ fn main() {
         drawn_at: None,
         chat: Vec::new(),
         status: None,
+        pixels: None,
     };
 
     Crust::init();
@@ -120,6 +123,7 @@ fn main() {
             "m" => app.mode = (app.mode + 1) % MODES.len(),
             "M" => app.mode = (app.mode + MODES.len() - 1) % MODES.len(),
             "ENTER" => {
+                app.hide_picture();
                 show_chain(&app, cols, rows);
                 Crust::clear_screen();
             }
@@ -148,6 +152,7 @@ fn main() {
                         match ask_claude(&app, q.trim()) {
                             Ok(a) if !a.is_empty() => {
                                 app.chat.push((q.trim().to_string(), a.clone()));
+                                app.hide_picture();
                                 Crust::clear_screen();
                                 let w = cols.saturating_sub(8).min(96);
                                 let h = rows.saturating_sub(4).min(34);
@@ -175,6 +180,7 @@ fn main() {
                 app.drawn_at = None;
             }
             "?" => {
+                app.hide_picture();
                 show_help(cols, rows);
                 Crust::clear_screen();
             }
@@ -185,11 +191,19 @@ fn main() {
         (cols, rows) = draw(&mut app, &mut footer);
     }
 
+    app.hide_picture();
     Crust::cleanup();
     Crust::clear_screen();
 }
 
 impl App {
+    /// Take the overview's picture down; the next overview frame puts it back.
+    fn hide_picture(&mut self) {
+        if let Some(d) = self.pixels.as_mut() {
+            d.clear_all();
+        }
+    }
+
     fn cur(&self) -> &'static data::Nuclide {
         let t = table();
         t.get(self.z, self.n).unwrap_or(&t.all[0])
@@ -314,8 +328,9 @@ fn draw(app: &mut App, footer: &mut Pane) -> (u16, u16) {
     }
     if app.view == View::Overview {
         draw_header(app, cols);
-        canvas::overview(app.z, app.n, app.mode, 1, 2, cols, chart_h + 1);
+        canvas::overview(app.z, app.n, app.mode, 1, 2, cols, chart_h + 1, &mut app.pixels);
     } else {
+        app.hide_picture();
         draw_header(app, cols);
         draw_chart(app, cols, chart_h);
     }

@@ -33,8 +33,8 @@ lead-206, every half-life on the way.
   scale over 26 decades, binding energy per nucleon (the iron peak is
   right there), natural abundance, and the year first reported, which
   fills the chart outward over a century
-- **The whole chart at once** (`z`): all 3,386 in braille, eight nuclides
-  per character, 90×30 cells
+- **The whole chart at once** (`z`): all 3,386 on one screen, a square
+  each in glass or any terminal that shows images, braille elsewhere
 - **Find one** (`/`) the way you would say it: `U-238`, `fe56`, `14C`
 - **Ask Claude** (`c`) about the nuclide you are looking at, with its
   numbers and decay chain as context
@@ -65,7 +65,7 @@ Or build it: `cargo build --release`. It needs
 | g / G | Hydrogen / the heaviest element |
 | Enter | Follow the decay chain to its stable end |
 | 1-5, m | Colour by decay mode, half-life, binding energy, abundance, year |
-| z | The whole chart at once, in braille |
+| z | The whole chart at once |
 | / | Find a nuclide: `U-238`, `fe56`, `14C` |
 | c | Ask Claude about this nuclide |
 | e | Write the table to `~/isotopes.csv` |
