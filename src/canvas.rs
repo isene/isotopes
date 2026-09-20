@@ -170,8 +170,7 @@ pub fn overview(cur_z: u32, cur_n: u32, mode: usize, x: u16, y: u16, w: u16, h: 
         std::io::stdout().flush().ok();
         let canvas = picture(cur_z, cur_n, mode, cw, ch, None);
         if let Some(d) = display.as_mut() {
-            d.clear_all();
-            d.show_canvas(&canvas, x + label_w, y);
+            d.swap_canvas(&canvas, x + label_w, y);
         }
     }
 }
