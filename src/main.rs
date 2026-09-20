@@ -677,9 +677,13 @@ fn gradient_bar(tail: &str) -> String {
 
 fn keys_line(app: &App) -> String {
     let overview = if app.view == View::Overview { "z chart" } else { "z overview" };
-    style::dim(&format!(
+    let keys = format!(
         "←↓↑→ move · Tab stable · ⏎ decay chain · 1-5/m colour · {overview} · / find · c claude · e csv · r redraw · ? help · q"
-    ))
+    );
+    let version = format!("v{VERSION}");
+    let (cols, _) = Crust::terminal_size();
+    let pad = (cols as usize).saturating_sub(crust::display_width(&keys) + version.len() + 1).max(1);
+    style::dim(&format!("{keys}{}{version}", " ".repeat(pad)))
 }
 
 // ─────────────────────────── popups ──────────────────────────────────
