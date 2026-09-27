@@ -68,6 +68,7 @@ Or build it: `cargo build --release`. It needs
 | z | The whole chart at once |
 | / | Find a nuclide: `U-238`, `fe56`, `14C` |
 | c | Ask Claude about this nuclide |
+| Ctrl-A | A full Claude session about what is on screen, as in every Fe₂O₃ app |
 | e | Write the table to `~/isotopes.csv` |
 | r | Redraw from scratch |
 | ? | Help |
