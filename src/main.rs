@@ -150,7 +150,7 @@ fn main() {
                 }
                 Crust::clear_screen();
             }
-            "c" => {
+            "c" if crust::CLAUDE => {
                 let q = footer.ask_or_cancel("ask claude: ", "");
                 print!("{}", Cursor::hide_seq());
                 std::io::stdout().flush().ok();
@@ -686,9 +686,9 @@ fn gradient_bar(tail: &str) -> String {
 
 fn keys_line(app: &App) -> String {
     let overview = if app.view == View::Overview { "z chart" } else { "z overview" };
-    let keys = format!(
+    let keys = crust::key_help(format!(
         "←↓↑→ move · Tab stable · ⏎ decay chain · 1-5/m colour · {overview} · / find · c claude · e csv · r redraw · ? help · q"
-    );
+    ));
     let version = format!("v{VERSION}");
     let (cols, _) = Crust::terminal_size();
     let pad = (cols as usize).saturating_sub(crust::display_width(&keys) + version.len() + 1).max(1);
@@ -793,7 +793,7 @@ fn show_help(cols: u16, rows: u16) {
     let w = cols.saturating_sub(8).min(80);
     let h = rows.saturating_sub(4).min(32);
     let mut p = Popup::centered(w, h, 252, 234);
-    p.view(&help);
+    p.view(&crust::key_help(help));
 }
 
 // ─────────────────────────── the rest ────────────────────────────────
