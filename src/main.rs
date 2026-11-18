@@ -689,10 +689,10 @@ fn keys_line(app: &App) -> String {
     let keys = crust::key_help(format!(
         "←↓↑→ move · Tab stable · ⏎ decay chain · 1-5/m colour · {overview} · / find · c claude · e csv · r redraw · ? help · q"
     ));
-    let version = format!("v{VERSION}");
+    let version = crust::version_tag("isotopes", VERSION);
     let (cols, _) = Crust::terminal_size();
-    let pad = (cols as usize).saturating_sub(crust::display_width(&keys) + version.len() + 1).max(1);
-    style::dim(&format!("{keys}{}{version}", " ".repeat(pad)))
+    let pad = (cols as usize).saturating_sub(crust::display_width(&keys) + crust::display_width(&version)).max(1);
+    format!("{}{version}", style::dim(&format!("{keys}{}", " ".repeat(pad))))
 }
 
 // ─────────────────────────── popups ──────────────────────────────────
